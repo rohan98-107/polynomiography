@@ -36,7 +36,6 @@ def plot(p, n=700, extent=[-1.5,1.5,-1.5,1.5], cmap='Reds',save=False):
     for r, x in enumerate(np.linspace(xmin, xmax, n)):
         for s, y in enumerate(np.linspace(ymin, ymax, n)):
             z = x + y*1j
-           # shade,root = newton(z,p,pprime)
             shade, root = Newton(z,p)
             root = np.round(root, 3)
             if not root in roots:
@@ -48,30 +47,30 @@ def plot(p, n=700, extent=[-1.5,1.5,-1.5,1.5], cmap='Reds',save=False):
         plt.show()
     else:
         s = ''.join(random.choices(string.ascii_uppercase + string.digits, k=10))
-        plt.imsave( s + ".png",m.T,cmap=cmap)
+        plt.imsave( "images/"+ s + ".png",m.T,cmap=cmap)
         return s + ".png"
 
 # DEMO GRAPHS --------------------------------------------------
 
-#flower 
+#flower
 #f = lambda z: z**5 - 1
 #plot(f,cmap='twilight',extent=[-.75,.75,-.75,.75])
 
-#butterfly 
-#g = lambda z: z**9 + z**2 - 4*z + 5
-#plot(g,cmap='inferno',extent=[-1.1,-0.8,-0.2,0.2]) 
-
-#building/tower 
+#butterfly
+'''
+g = lambda z: z**9 + z**2 - 4*z + 5
+plot(g,cmap='inferno',extent=[-1.1,-0.8,-0.2,0.2])
+'''
+#building/tower
 #k = lambda z: (z-5)**3 + z - 1
 #plot(k,cmap='brg',extent=[7,30,-5,5])
 
-#dog 
-h = lambda z: (z)**4 + z - 1
-plot(h,cmap='tab20c',extent=[-0.8,1.5,-0.9,0.9])
+#dog
+#h = lambda z: (z)**4 + z - 1
+#plot(h,cmap='tab20c',extent=[-0.8,1.5,-0.9,0.9])
 
 #----------------------------------------------------------------
 
 #misc graphs - for demo -
 #f = lambda z: z**3 - 1
-#plot(f)
-
+#plot(h)
