@@ -252,7 +252,7 @@ def naiveMerge(buckets,sensitivity=1):
                 buckets.remove(ss)
                 i += 1
 
-        if i == 0:
+        if i == 0 and len(s) > 1:
             continue
         else:
             buckets.remove(s)
