@@ -72,4 +72,4 @@ def plot(p, n=700, extent=[-1.5,1.5,-1.5,1.5], cmap='Reds',save=False):
 
 #misc graphs - for demo -
 #f = lambda z: z**3 - 1
-#plot(h)
+#plot(f,cmap='prism',save=True)

@@ -1,8 +1,11 @@
 from ClassifierMain import *
 from numpy import nanmax, argmax, unravel_index
-from scipy.spatial.distance import pdist, squareform
+from scipy.spatial.distance import pdist, squareform, directed_hausdorff
 from functools import reduce
+from time import clock
+from matplotlib.path import Path
 import operator
+
 
 def getAssignedNeighbors(b,point_dict,buckets):
 
@@ -141,49 +144,37 @@ def inRadius(tup1,tup2,R):
     else:
         return False
 
-def radialRefinement(buckets,radius=10): #don't try to do anything clever here, just brute force the whole thing
+def radialRefinement(buckets,radius=10):
 
     bp = [p for c in buckets for p in c]
-    res = [[p] for p in bp]
+    res = [set([p]) for p in bp]
 
     #first pass
     for l in res:
 
         if len(l) == 1:
-            pxy = l[0]
-            temp = [x for x in bp if x != pxy]
-            for p in temp:
-                if inRadius(pxy,p,radius):
-                    l.append(p)
+            pxy = list(l)[0]
+            for p in bp:
+                if inRadius(pxy,p,radius) and p != pxy:
+                    l.add(p)
 
             if len(l) == 1:
                 res.remove(l)
 
     # grouping
     for l in res:
-
-        temp = [b for b in res if b != l]
-        for t in temp:
-            if len(set(l).intersection(set(t))) > 0:
-                l.extend(t)
+        for t in res:
+            if l & t and t != l:
                 res.remove(t)
-            # add a stop condition here for safety?
-            # else:
-            #    break
+                l.update(t)
 
-    result = []
-    for l in res:
-        s = set(l)
-        result.append(s)
+    for s in res:
+        for r in res:
+            if r.issubset(s) and r != s:
+                res.remove(r)
 
+    return res
 
-    for s in result:
-        temp = [y for y in result if y != s]
-        for r in temp:
-            if r.issubset(s):
-                result.remove(r)
-
-    return result
 
 def findEndpoints(buckets,eps=math.sqrt(2),origin=(0,0)):
 
@@ -307,7 +298,7 @@ def sequentialMerge(buckets,s_array=None):
 
     return temp
 
-def fillBorder(s_buckets):
+def fillBorder(s_buckets,extend=True):
 
     res = []
     for c in s_buckets:
@@ -322,107 +313,128 @@ def fillBorder(s_buckets):
             dc.append((x2,y2))
             i += 1
 
-        p1,q1 = dc[0]
-        a,b = dc[1]
+        if extend:
+            p1,q1 = dc[0]
+            a,b = dc[1]
 
-        x1,y1 = (2*p1-a,2*q1-b)
-        dc.insert(0,(x1,y1))
+            x1,y1 = (2*p1-a,2*q1-b)
+            dc.insert(0,(x1,y1))
 
-        p2,q2 = dc[-1]
-        c,d = dc[-2]
+            p2,q2 = dc[-1]
+            c,d = dc[-2]
 
-        x2,y2 = (2*p2-c,2*q2-d)
-        dc.append((x2,y2))
+            x2,y2 = (2*p2-c,2*q2-d)
+            dc.append((x2,y2))
 
         res.append(dc)
 
-    #now, make a prediction about the next point assuming that the endpoint
-    #is the next midpoint
-
     return res
-#------------------------------------------------------MAIN SCRIPT---------------------------------------------------------
 
-dir = "/Users/rohanrele/Documents/research/Polynomiography/Classifier/images/"
-file = "HZOJ5HU6G7.png"
-test_file = "D1W68LOJY7.png"
-input = dir + test_file
+def findCentroids(buckets, size=False, sig=False, sigsize=5):
+    result = []
+    for c in buckets:
+        if c:
+            if not sig:
+                K = len(c)
+                exes, whys = zip(*c)
+                result.append((c, (sum(exes) / K, sum(whys) / K)))
+            else:
+                if len(c) >= sigsize:
+                    K = len(c)
+                    exes, whys = zip(*c)
+                    result.append((c, (sum(exes) / K, sum(whys) / K)))
+                else:
+                    if size:
+                        result.append(([], None))
+        else:
+            if size:
+                result.append(([], None))
+
+    return result
+
+def createHulls(buckets):
+    hulls = []
+    temp = [np.array([np.array(x) for x in b]) for b in buckets]
+
+    for t in temp:
+        if t.shape[0] <= 5:
+            hulls.append(None)
+        else:
+            hulls.append(ConvexHull(t,'Qg'))
+
+    return hulls
+
+def findRoots_convexHull(buckets_with_centers,dist_eps=5,num_fills=3):
+
+    result = []
+    centers = []
+    buckets = []
+    for b,c in buckets_with_centers:
+        centers.append(c)
+        buckets.append(b)
+
+    hulls = createHulls(buckets)
+    temp = np.array([np.array([np.array(x) for x in b]) for b in buckets])
+    i = 0
+    H = len(hulls)
+
+    while i < H:
+        if hulls[i] is not None:
+            approx = []
+            for c in centers:
+                hull_vertices = temp[i][hulls[i].vertices]
+                hull_vertices = hull_vertices.tolist()
+                hull_vertices = [tuple(x) for x in hull_vertices]
+                filled = [hull_vertices]
+
+                for j in range(0,num_fills):
+                    filled = fillBorder(filled,extend=False)
+
+                arr_filled = [np.array([np.array(f) for f in r]) for r in filled][0]
+                temp_path = Path(arr_filled)
+                orig_path = Path(temp[i])
+                dist, _, _ = directed_hausdorff(arr_filled,temp[i])
+
+                if dist <= dist_eps and temp_path.contains_point(np.array(c)):
+                    approx.append(c)
+
+            if approx:
+                A = len(approx)
+                xs, ys = zip(*approx)
+                result.append((sum(xs)/A,sum(ys)/A))
+
+        i += 1
 
 
-name, tri = triangulation(input, n=500)
-p = tri.points
-q = tri.vertices
-r = generateEdgeDict(p, q)
+    return set(result)
 
-op = (350,0)
-point_test = generatePointDict(r)
-#print(point_test)
-border_test = densityClasses2(point_test)
-#border_test = densityClasses3(point_test,origin=op)
+def findRoots_naive(buckets_with_centers,radius):
 
-res = radialRefinement(border_test,radius=25)
-print("Length:" + str(len(res)))
-print(res)
+    result = []
+    centers = []
+    for _ ,c in buckets_with_centers:
+        centers.append(c)
 
-myPlot3(p,res)
+    for c in centers:
+        temp = [x for x in centers if x != c]
+        temp2 = []
+        for t in temp:
+            if (c[0]-t[0])**2 + (c[1]-t[1])**2 <= radius**2:
+                temp2.append(t)
 
-s1 = naiveMerge(res)
-print("Length Step 1: " + str(len(s1)))
-s2 = naiveMerge(s1)
-print("Length Step 2: " + str(len(s2)))
-s3 = naiveMerge(s2)
-print("Length Step 3: " + str(len(s3)))
-s4 = naiveMerge(s3)
-print("Length Step 4: " + str(len(s4)))
-s5 = naiveMerge(s4)
-print("Length Step 5: " + str(len(s5)))
-s6 = naiveMerge(s5)
-print("Length Step 6: " + str(len(s6)))
-s7 = naiveMerge(s6)
-print("Length Step 7: " + str(len(s7)))
-s8 = naiveMerge(s7)
-print("Length Step 8: " + str(len(s8)))
+        temp2.append(c)
+        if len(temp2) > 1:
+            K = len(temp2)
+            exes, whys = zip(*temp2)
+            result.append((sum(exes)/K,sum(whys)/K))
 
-myPlot3(p,s8)
+    for r in result:
+        temp = [y for y in result if y != r]
+        for t in temp:
+            if (r[0]-t[0])**2 + (r[1]-t[1])**2 <= radius**2:
+                result.remove(t)
 
-sortd = naiveSort(s8)
-print(sortd)
+    return set(result)
 
-brr = []
-for t in sortd:
-    brr.append((t,t[0],t[-1]))
-
-myPlot2(p,brr)
-
-filled = fillBorder(sortd)
-
-temp = [[item[0],item[1]] for sublist in filled for item in sublist]
-new_p = set(tuple(i) for i in p.tolist()).union(set(tuple(t) for t in temp))
-
-myPlot3(new_p,filled)
-
-post_fill = radialRefinement(filled,radius=30)
-s1 = naiveMerge(post_fill)
-print("Length Step 1: " + str(len(s1)))
-s2 = naiveMerge(s1)
-print("Length Step 2: " + str(len(s2)))
-s3 = naiveMerge(s2)
-print("Length Step 3: " + str(len(s3)))
-s4 = naiveMerge(s3)
-print("Length Step 4: " + str(len(s4)))
-s5 = naiveMerge(s4)
-print("Length Step 5: " + str(len(s5)))
-s6 = naiveMerge(s5)
-print("Length Step 6: " + str(len(s6)))
-s7 = naiveMerge(s6)
-print("Length Step 7: " + str(len(s7)))
-s8 = naiveMerge(s7)
-print("Length Step 8: " + str(len(s8)))
-
-myPlot3(new_p,s8)
-
-brr = []
-s8s = naiveSort(s8)
-for t in s8s:
-    brr.append((t,t[0],t[-1]))
-
-myPlot2(new_p,brr)
+def generateEquation(roots):
+    return lambda x: np.prod([x - (r[0] + r[1]*1j) for r in roots])

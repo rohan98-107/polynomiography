@@ -10,7 +10,7 @@ from skimage import filters, morphology, color
 from colormath.color_objects import LabColor
 from colormath.color_diff import delta_e_cie1976
 from numpy.lib.stride_tricks import as_strided
-from scipy.spatial import Delaunay
+from scipy.spatial import Delaunay, ConvexHull, convex_hull_plot_2d
 import cv2
 
 S = [(110.0, 245.0), (142.0, 255.0), (127.0, 249.0)]
@@ -118,7 +118,7 @@ def gaussian_mask(x, y, shape, amp=1, sigma=15):
     return g
 
 #entropy points
-def generate_max_entropy_points(image, n_points=100,entropy_width=0.2,filter_width=0.1,suppression_width=0.3,suppression_amplitude=3):
+def generate_max_entropy_points(image,n_points,entropy_width,filter_width,suppression_width,suppression_amplitude):
     # calculate length scale
     ymax, xmax = image.shape[:2]
     length_scale = np.sqrt(xmax*ymax / n_points)
@@ -242,6 +242,15 @@ def longest(list1):
             l = max(l,max(longest(elem) for elem in list1))
     return l
 
+def getEntropy(img_fp,n=200,entropy_width=0.2,filter_width=0.1,suppression_width=0.3,suppression_amplitude=3):
+    im = cv2.imread(img_fp)
+    points = generate_max_entropy_points(im,n,entropy_width,filter_width,suppression_width,suppression_amplitude)
+    points = np.concatenate([points, edge_points(im)])
+
+    tri = Delaunay(points)
+
+    return tri
+
 def myPlot(points, borders): #vertices):
     plt.scatter(*zip(*points),color="black")
 
@@ -288,4 +297,27 @@ def myPlot3(points,buckets): #heatmap based on class size
 
     plt.show()
 
-# then create function to reconstruct polynomial
+def myPlot4(points,buckets,save=False,fpath=""):
+
+    plt.scatter(*zip(*points),color="black")
+    for obj in buckets:
+        l = obj[0]
+        c = obj[1]
+        plt.scatter(*zip(*l),color='red')
+        plt.scatter(c[0],c[1],color='blue',marker="x")
+
+    if save:
+        plt.axis('off')
+        plt.savefig(fpath,bbox_inches='tight', pad_inches=0)
+    else:
+        plt.show()
+
+def myPlot5(centroid_list,colormap):
+    i = 0
+    for obj in centroid_list:
+        l = obj[0]
+        c = obj[1]
+        if l:
+            plt.scatter(*zip(*l),color=colormap[i],edgecolors="black")
+            plt.scatter(c[0],c[1],color=colormap[i],marker="x",edgecolors="red")
+        i += 1
